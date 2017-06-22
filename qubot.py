@@ -5,21 +5,37 @@ import os
 import time
 import urllib #url lib module should be included in default
 import feedparser
+import pymysql.cursors
+#import MySQLdb #appears to be a dead project... not working anyway.
 from slackclient import SlackClient
 
-#qubots ID as an environment variable
+DB_PW = os.environ.get("DB_PW")
 BOT_ID = os.environ.get("BOT_ID")
+slack_client = SlackClient(os.environ.get('SLACK_BOT_TOKEN'))
 
+connection = pymysql.connect(host="localhost",
+					user ='root',
+					passwd=DB_PW,
+					db= 'pythonspot',
+					charset='utf8mb4',
+					cursorclass=pymysql.cursors.DictCursor)
+#sql table doesnt seem to be playing nice CREATE TABLE 'users' ('id' int(11) NOT NULL AUTO_INCREMENT, 'email' varchar(255) COLLATE utf8_bin NOT_NULL, 'password' varchar(255) COLLATE utf8_bin NOT NULL, PRIMARY KEY ('id')) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin AUTO_INCREMENT=1 ;
+
+cur = connection.cursor()
+
+#qubots ID as an environment variable
 #constants
 AT_BOT ="<@" + BOT_ID + ">"
 EXAMPLE_COMMAND = "do"
 SEARCH_COMMAND = "search"
+FETCH_COMMAND = "fetch"
 
-slack_client = SlackClient(os.environ.get('SLACK_BOT_TOKEN'))
 
 base_url = 'http://export.arxiv.org/api/query?'
 start = 0
 max_results = 2
+sortBy = 'lastUpdatedDate'
+sortOrder = 'descending'
 
 
 def handle_command(command, channel):
@@ -32,12 +48,30 @@ def handle_command(command, channel):
 	           "* command with numbers, delimited by spaces."
 	if command.startswith(EXAMPLE_COMMAND):
 	    response = "Sure...write some more code then I can do that!"
+
+	if command.startswith(FETCH_COMMAND):
+		if command.lower().find("settings") >= 0:
+			response = "Sure, I'll get those settings for you. "
+			settings = ""
+			cur.execute("SELECT * FROM examples")
+			settings = cur.fetchone() #temporary testing just fetching something...
+			#for row in cur.fetchall():
+			#	new = row[0] + " " + row[1] + "\n"
+			#	settings += new
+			print(settings)
+			#response += settings
+		else:
+			response = "Hmm... I understood fetch... but fetch what? Maybe mention settings?"
+
+
 	if command.startswith(SEARCH_COMMAND):
 		start_pt = command.find("\"")
 		end_pt = command.find("\"", start_pt+1)
 		search_query = 'all:'+ command[start_pt+1:end_pt] #grabs the quoted text, THERE WAS AN EXTRA +1 HERE!
 
-		query = 'search_query=%s&start=%i&max_results=%i' %(search_query,start,max_results)
+		#query = 'search_query=%s&start=%i&max_results=%i' %(search_query,start,max_results)
+		query = 'search_query=%s&sortBy=%s&sortOrder=%s&max_results=%i' %(search_query,sortBy,sortOrder, max_results)
+		
 		#this is ahack to expose both namespaces
 		feedparser._FeedParserMixin.namespaces['http://a9.com/-/spec/opensearch/1.1/'] = 'opensearch'
 		feedparser._FeedParserMixin.namespaces['http://arxiv.org/schemas/atom'] = 'arxiv'
